@@ -26,53 +26,53 @@ The application evaluates the user's *investigation behavior* (rewarding optimal
 * [MongoDB](https://www.mongodb.com/try/download/community) (Running locally on port 27017, or an Atlas cluster)
 
 ### 1. Clone the repository
-\`\`\`bash
+```bash
 git clone https://github.com/your-username/debugging-simulator.git
 cd debugging-simulator
-\`\`\`
+```
 
 ### 2. Backend Setup
-\`\`\`bash
+```bash
 cd backend
 npm install
-\`\`\`
+```
 
 Create a `.env` file in the `backend/` directory:
-\`\`\`env
+```env
 # Local MongoDB (or replace with Atlas URI if remote)
 MONGODB_URI=mongodb://127.0.0.1:27017/debug-simulator
 
 # Get a free API key from https://aistudio.google.com/
 GEMINI_API_KEY=your_gemini_api_key_here
-\`\`\`
+```
 
 Seed the database with the built-in scenarios:
-\`\`\`bash
+```bash
 npm run seed
-\`\`\`
+```
 
 Start the backend server:
-\`\`\`bash
+```bash
 npm start
-\`\`\`
+```
 *(The server will run on http://localhost:5001)*
 
 ### 3. Frontend Setup
 Open a new terminal window:
-\`\`\`bash
+```bash
 cd frontend
 npm install
-\`\`\`
+```
 
 *(Optional)* Create a `.env` file in the `frontend/` directory if your backend is hosted elsewhere:
-\`\`\`env
+```env
 VITE_API_URL=http://localhost:5001
-\`\`\`
+```
 
 Start the development server:
-\`\`\`bash
+```bash
 npm run dev
-\`\`\`
+```
 *(The app will open at http://localhost:5173)*
 
 ---
