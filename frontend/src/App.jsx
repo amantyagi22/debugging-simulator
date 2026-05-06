@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import './App.css';
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
+
 function App() {
   const [scenarios, setScenarios] = useState([]);
   const [activeScenario, setActiveScenario] = useState(null);
@@ -17,14 +19,14 @@ function App() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    fetch('http://localhost:5001/scenarios')
+    fetch(`${API_URL}/scenarios`)
       .then(res => res.json())
       .then(data => setScenarios(data))
       .catch(err => console.error('Error fetching scenarios:', err));
   }, []);
 
   const loadScenario = (id) => {
-    fetch(`http://localhost:5001/scenarios/${id}`)
+    fetch(`${API_URL}/scenarios/${id}`)
       .then(res => res.json())
       .then(data => {
         if (data.error) {
@@ -54,7 +56,7 @@ function App() {
     setResult(null);
 
     setTimeout(() => {
-      fetch('http://localhost:5001/submit', {
+      fetch(`${API_URL}/submit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
