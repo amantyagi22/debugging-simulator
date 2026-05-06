@@ -13,7 +13,9 @@ function App() {
   const [hintsUsed, setHintsUsed] = useState(0);
   
   // Diagnosis state
-  const [answer, setAnswer] = useState('');
+  const [rootCause, setRootCause] = useState('');
+  const [reasoning, setReasoning] = useState('');
+  const [fix, setFix] = useState('');
   
   const [result, setResult] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -35,7 +37,9 @@ function App() {
         }
         setActiveScenario(data);
         setResult(null);
-        setAnswer('');
+        setRootCause('');
+        setReasoning('');
+        setFix('');
         setHintsUsed(0);
         setActionsTaken([]);
         setActiveAction(null);
@@ -46,8 +50,8 @@ function App() {
   const handleActionClick = (actionKey, actionLabel) => {
     setActiveAction(actionKey);
     // Record action if not already recorded
-    if (!actionsTaken.find(a => a.action === actionLabel)) {
-      setActionsTaken([...actionsTaken, { action: actionLabel, timestamp: Date.now() }]);
+    if (!actionsTaken.find(a => a.type === actionKey)) {
+      setActionsTaken([...actionsTaken, { type: actionKey, action: actionLabel, timestamp: Date.now() }]);
     }
   };
 
@@ -61,7 +65,9 @@ function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           scenarioId: activeScenario._id, 
-          answer, 
+          rootCause, 
+          reasoning, 
+          fix,
           hintsUsed,
           actionsTaken 
         })
@@ -78,16 +84,17 @@ function App() {
     }, 1500);
   };
 
-  const renderFormattedLogs = (logsString) => {
-    if (!logsString) return null;
-    return logsString.split('\n').map((line, idx) => {
-      let className = 'log-default';
-      if (line.includes('[ERROR]') || line.includes('FATAL')) className = 'log-error';
-      else if (line.includes('[WARN]')) className = 'log-warn';
-      else if (line.includes('[INFO]')) className = 'log-info';
+  // Log rendering with syntax highlighting
+  const renderFormattedLogs = (logs) => {
+    if (!logs) return '';
+    return logs.split('\n').map((line, index) => {
+      let lineClass = 'log-line';
+      if (line.includes('[ERROR]') || line.includes('FATAL')) lineClass += ' log-error';
+      else if (line.includes('[WARN]')) lineClass += ' log-warn';
+      else if (line.includes('[INFO]')) lineClass += ' log-info';
       
       return (
-        <div key={idx} className={className}>
+        <div key={index} className={lineClass}>
           {line}
         </div>
       );
@@ -149,15 +156,19 @@ function App() {
 
         <div className="editor-panel">
           <div className="tabs">
-            {actions.map(btn => (
-              <button 
-                key={btn.type}
-                className={`tab ${activeAction === btn.type ? 'active' : ''}`}
-                onClick={() => handleActionClick(btn.type, btn.label)}
-              >
-                {btn.label}
-              </button>
-            ))}
+            {actions.map(btn => {
+              const isCompleted = actionsTaken.some(a => a.type === btn.type);
+              return (
+                <button 
+                  key={btn.type}
+                  className={`tab ${activeAction === btn.type ? 'active' : ''} ${isCompleted ? 'completed' : ''}`}
+                  onClick={() => handleActionClick(btn.type, btn.label)}
+                >
+                  {isCompleted && <span className="check-icon">✓</span>}
+                  {btn.label}
+                </button>
+              );
+            })}
           </div>
           
           <div className="code-display">
@@ -172,18 +183,40 @@ function App() {
         </div>
       </div>
 
-      <div className="diagnosis-panel">
-        <h3>Submit Your Diagnosis</h3>
+      <div className="diagnosis-panel structured-diagnosis">
+        <h3>Submit Your Structured Diagnosis</h3>
         
-        <textarea 
-          placeholder="Explain the root cause, why it's happening, and how to fix it..."
-          value={answer}
-          onChange={(e) => setAnswer(e.target.value)}
-          rows={5}
-          style={{ width: '100%', marginBottom: '1rem', background: 'var(--bg-color)', color: 'var(--text-color)', border: '1px solid var(--border-color)', padding: '0.75rem', borderRadius: '4px' }}
-        />
+        <div className="input-group">
+          <label>1. Root Cause</label>
+          <input 
+            type="text" 
+            placeholder="What is failing? (e.g. Missing index on emails...)"
+            value={rootCause}
+            onChange={(e) => setRootCause(e.target.value)}
+          />
+        </div>
 
-        <button className="submit-btn" onClick={submitDiagnosis} disabled={isSubmitting || !answer}>
+        <div className="input-group">
+          <label>2. Why is this happening?</label>
+          <textarea 
+            placeholder="Explain the technical mechanics of the issue..."
+            value={reasoning}
+            onChange={(e) => setReasoning(e.target.value)}
+            rows={3}
+          />
+        </div>
+
+        <div className="input-group">
+          <label>3. How would you fix it?</label>
+          <textarea 
+            placeholder="Describe the solution or code changes..."
+            value={fix}
+            onChange={(e) => setFix(e.target.value)}
+            rows={3}
+          />
+        </div>
+
+        <button className="submit-btn" onClick={submitDiagnosis} disabled={isSubmitting || !rootCause || !reasoning || !fix}>
           {isSubmitting ? 'Evaluating Diagnosis...' : 'Submit Diagnosis'}
         </button>
 
@@ -204,6 +237,15 @@ function App() {
                 <strong>Penalties Applied:</strong>
                 <ul>
                   {result.penalties.map((p, i) => <li key={i}>{p}</li>)}
+                </ul>
+              </div>
+            )}
+
+            {result.bonuses && result.bonuses.length > 0 && (
+              <div className="bonuses-box">
+                <strong>Bonuses Earned:</strong>
+                <ul>
+                  {result.bonuses.map((b, i) => <li key={i}>{b}</li>)}
                 </ul>
               </div>
             )}

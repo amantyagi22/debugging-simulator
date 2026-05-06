@@ -23,10 +23,10 @@ function calculateSectionScore(answer, expectedKeywords = []) {
 
 router.post('/', async (req, res) => {
   try {
-    const { scenarioId, answer = '', hintsUsed = 0, actionsTaken = [] } = req.body;
+    const { scenarioId, rootCause = '', reasoning = '', fix = '', hintsUsed = 0, actionsTaken = [] } = req.body;
     
-    if (!scenarioId || !answer) {
-      return res.status(400).json({ error: 'Missing diagnosis answer' });
+    if (!scenarioId || !rootCause || !reasoning || !fix) {
+      return res.status(400).json({ error: 'Missing structured diagnosis fields' });
     }
 
     const scenario = await Scenario.findById(scenarioId);
@@ -34,10 +34,10 @@ router.post('/', async (req, res) => {
       return res.status(404).json({ error: 'Scenario not found' });
     }
 
-    // 1. Calculate section scores by evaluating the single answer string against all expected categories
-    const rcResult = calculateSectionScore(answer, scenario.expectedRootCause);
-    const reasonResult = calculateSectionScore(answer, scenario.expectedReasoning);
-    const fixResult = calculateSectionScore(answer, scenario.expectedFix);
+    // 1. Calculate section scores individually
+    const rcResult = calculateSectionScore(rootCause, scenario.expectedRootCause);
+    const reasonResult = calculateSectionScore(reasoning, scenario.expectedReasoning);
+    const fixResult = calculateSectionScore(fix, scenario.expectedFix);
 
     const sectionScores = {
       rootCause: Math.round(rcResult.score),
@@ -47,8 +47,9 @@ router.post('/', async (req, res) => {
 
     let baseScore = (sectionScores.rootCause + sectionScores.reasoning + sectionScores.fix) / 3;
 
-    // 2. Penalties (Thinking & Investigation)
+    // 2. Penalties & Bonuses (Thinking & Investigation)
     let penalties = [];
+    let bonuses = [];
     let penaltyScore = hintsUsed * 10;
     if (hintsUsed > 0) penalties.push(`Hints used: -${hintsUsed * 10}`);
 
@@ -73,16 +74,16 @@ router.post('/', async (req, res) => {
         }
       }
       if (isOptimal) {
-        penalties.push(`Followed optimal investigation path: +10 bonus`);
+        bonuses.push(`Followed optimal investigation path: +10 bonus`);
         bonusScore += 10;
       }
     }
 
     // Wrong concepts
-    const lowerAnswer = answer.toLowerCase();
+    const combinedAnswer = `${rootCause} ${reasoning} ${fix}`.toLowerCase();
     const wrongConcepts = scenario.wrongConcepts || [];
     wrongConcepts.forEach(wc => {
-      if (fuzz.partial_ratio(wc.toLowerCase(), lowerAnswer) >= 80) {
+      if (fuzz.partial_ratio(wc.toLowerCase(), combinedAnswer) >= 80) {
         penalties.push(`Identified wrong concept '${wc}': -15`);
         penaltyScore += 15;
       }
@@ -98,14 +99,12 @@ router.post('/', async (req, res) => {
         const prompt = `You are an expert debugging mentor evaluating a junior engineer.
 Scenario: "${scenario.title}" - ${scenario.problemStatement}
 
-User's Diagnosis: "${answer}"
+User's Structured Diagnosis:
+- Root Cause: "${rootCause}" (Score: ${sectionScores.rootCause}/100)
+- Reasoning: "${reasoning}" (Score: ${sectionScores.reasoning}/100)
+- Fix: "${fix}" (Score: ${sectionScores.fix}/100)
 
-Section Scores calculated by engine:
-- Root Cause Identified: ${sectionScores.rootCause}/100
-- Reasoning Explained: ${sectionScores.reasoning}/100
-- Fix Proposed: ${sectionScores.fix}/100
-
-Actions Taken During Investigation: ${actionNames.join(', ')}
+Actions Taken During Investigation: ${actionTypes.join(', ')}
 Penalties Applied: ${penalties.join(', ') || 'None'}
 
 Final Score: ${Math.round(finalScore)}/100
@@ -116,15 +115,24 @@ Write 2-4 sentences of coaching feedback.
 - Mention their investigation behavior (e.g., if they skipped checking the DB indexes or jumped to conclusions).
 - DO NOT just recite their score. Make it sound like a senior dev giving code review feedback.`;
         
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: prompt
-        });
+        let response;
+        try {
+          response = await ai.models.generateContent({
+              model: 'gemini-2.5-flash',
+              contents: prompt
+          });
+        } catch (primaryError) {
+          console.log("Primary model failed (likely high demand), attempting fallback to gemini-2.0-flash...");
+          response = await ai.models.generateContent({
+              model: 'gemini-2.0-flash',
+              contents: prompt
+          });
+        }
         
         feedback = response.text;
       } catch (e) {
         console.error("AI Error:", e);
-        feedback = 'AI coaching unavailable at the moment. Check your section scores!';
+        feedback = 'Google AI is currently experiencing very high global demand and timed out. Your scores above are accurate, though!';
       }
     } else {
       feedback = 'Configure GEMINI_API_KEY for dynamic AI coaching.';
@@ -133,9 +141,9 @@ Write 2-4 sentences of coaching feedback.
     // 4. Save Attempt
     const attempt = new Attempt({
       scenarioId,
-      rootCause: answer,
-      reasoning: 'Evaluated from single text box',
-      fix: 'Evaluated from single text box',
+      rootCause,
+      reasoning,
+      fix,
       actionsTaken,
       hintsUsed,
       score: Math.round(finalScore),
@@ -147,6 +155,7 @@ Write 2-4 sentences of coaching feedback.
       score: Math.round(finalScore),
       sectionScores,
       penalties,
+      bonuses,
       feedback
     });
   } catch (err) {
